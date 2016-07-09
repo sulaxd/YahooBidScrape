@@ -1,12 +1,20 @@
-require(plyr)
-require(rvest)
-require(magrittr)
-require(plotly)
-require(jiebaR)
-require(wordcloud)
-require(shiny)
-require(mongolite)
+# require(plyr)
+# require(rvest)
+# require(magrittr)
+# require(plotly)
+# require(jiebaR)
+# require(wordcloud)
+# require(shiny)
+# require(mongolite)
 
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+ipak(c("plyr","rvest","magrittr","plotly","jiebaR","wordcloud",
+       "shiny","mongolite"))
 
 #### Search Function ####
 ybid.scrape <- function(main.keywords="iphone6",
