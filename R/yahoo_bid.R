@@ -1,11 +1,4 @@
-# require(plyr)
-# require(rvest)
-# require(magrittr)
-# require(plotly)
-# require(jiebaR)
-# require(wordcloud)
-# require(shiny)
-# require(mongolite)
+
 
 ipak <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -16,6 +9,14 @@ ipak <- function(pkg){
 ipak(c("plyr","rvest","magrittr","plotly","jiebaR","wordcloud",
        "shiny","mongolite"))
 
+require(plyr)
+require(rvest)
+require(magrittr)
+require(plotly)
+require(jiebaR)
+require(wordcloud)
+require(shiny)
+require(mongolite)
 #### Search Function ####
 ybid.scrape <- function(main.keywords="iphone6",
                         filter.words.remove=c("6s|plus|32g|64g|128g"),
