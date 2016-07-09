@@ -1,6 +1,7 @@
 
 shinyUI(
   navbarPage(
+    
     title = '價格趨勢圖',
       tabPanel('關鍵字設定',
               h1('Search'),
