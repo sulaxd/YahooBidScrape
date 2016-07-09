@@ -136,8 +136,8 @@ wordcloud.bid <- function(df){
   s <- gsub("[0-9]+?","",s)
   tableWord<-count(s)
   Sys.info()
-  if(get_os()!="windows"){
-    # par(family=("Heiti TC Light"))
+  if(get_os()=="osx"){
+    par(family=("Heiti TC Light"))
   }
   wordcloud(tableWord[,1],tableWord[,2], scale=c(8,0.8),
             random.order=F)
