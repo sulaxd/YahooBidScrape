@@ -5,7 +5,7 @@ require(plotly)
 require(jiebaR)
 require(wordcloud)
 require(shiny)
-scrape_yahoo <- function(main.keywords="iphone6",
+ybid.scrape <- function(main.keywords="iphone6",
                          filter.words.remove=c("6s","plus","32g","64g","128g"),
                          filter.words.keep="16g",
                          page.limit){
@@ -213,104 +213,105 @@ loadDataMongo <- function(){
   return(newdata)
 }
 
-app <- shinyApp(
-  ui = navbarPage(
+ybid.shiny <- function(){
+  app <- shinyApp(
+    ui = navbarPage(
 
-    title = '價格趨勢圖',
-    tabPanel('關鍵字設定',
-             h1('Search'),
-             fluidPage(
-               fluidRow(
-                 column(3,
-                        textInput("productKeyword",
-                                  label = h3("請輸入您要搜尋的商品關鍵字"),
-                                  value = "iPhone6")
+      title = '價格趨勢圖',
+      tabPanel('關鍵字設定',
+               h1('Search'),
+               fluidPage(
+                 fluidRow(
+                   column(3,
+                          textInput("productKeyword",
+                                    label = h3("請輸入您要搜尋的商品關鍵字"),
+                                    value = "iPhone6")
+                   ),
+
+                   column(3,
+                          textInput("includeKeyword",
+                                    label = h3("請輸入一定要出現的關鍵字"),
+                                    value = "16g")
+                   ) ,
+                   column(3,
+                          textInput("removeKeyword",
+                                    label = h3("請輸入您要去除的的關鍵字"),
+                                    value = "通訊行|全新")
+                   )
+
                  ),
+                 fluidRow(
 
-                 column(3,
-                        textInput("includeKeyword",
-                                  label = h3("請輸入一定要出現的關鍵字"),
-                                  value = "16g")
-                 ) ,
-                 column(3,
-                        textInput("removeKeyword",
-                                  label = h3("請輸入您要去除的的關鍵字"),
-                                  value = "通訊行|全新")
+                   column(3,
+                          textInput("lowerPrice",
+                                    label = h3("價格區間"),
+                                    value = "10000"),
+                          textInput("upperPrice",
+                                    label = h3("價格區間"),
+                                    value = "30000")
+
+
+                   )
+                 ),
+                 fluidRow(
+                   column(3,
+                          # actionButton("action", label = "Action"),
+                          submitButton("搜尋"))
                  )
+               ), #fluidPage End
+               mainPanel(
+                 dataTableOutput("mytable"),
+                 textOutput("text1")  #顯示key的關鍵字
 
-               ),
-               fluidRow(
-
-                 column(3,
-                        textInput("lowerPrice",
-                                  label = h3("價格區間"),
-                                  value = "10000"),
-                        textInput("upperPrice",
-                                  label = h3("價格區間"),
-                                  value = "30000")
-
-
-                 )
-               ),
-               fluidRow(
-                 column(3,
-                        # actionButton("action", label = "Action"),
-                        submitButton("搜尋"))
                )
-             ), #fluidPage End
-             mainPanel(
-               dataTableOutput("mytable"),
-               textOutput("text1")  #顯示key的關鍵字
+      ),#Tab Panel End
+      navbarMenu("資料視覺化",
+                 tabPanel("價格",
+                          mainPanel(
+                            plotlyOutput('markPlot')
+                          )
+                 ),
+                 tabPanel("地點",
+                          h1('地點'),
+                          mainPanel(
+                            plotOutput('locationPlot')
+                          ))
+      )
+    ),
+    server = function(input, output) {
+      output$mytable = renderDataTable({
+        newdata <- loadDataMongo()
+      })
 
-             )
-    ),#Tab Panel End
-    navbarMenu("資料視覺化",
-               tabPanel("價格",
-                        mainPanel(
-                          plotlyOutput('markPlot')
-                        )
-               ),
-               tabPanel("地點",
-                        h1('地點'),
-                        mainPanel(
-                          plotOutput('locationPlot')
-                        ))
-    )
-  ),
-  server = function(input, output) {
-    output$mytable = renderDataTable({
-      newdata <- loadDataMongo()
-    })
-
-    output$text1 <- renderText({
-      paste("You have typed", input$productKeyword)
-    })
+      output$text1 <- renderText({
+        paste("You have typed", input$productKeyword)
+      })
 
 
-    output$locationPlot <- renderPlot({
-      newdata <- loadDataMongo()
-      p <- ggplot(newdata, aes(x=newdata$Place, y=newdata$srp.pdprice.yui3)) + geom_point()
-      print(p)
+      output$locationPlot <- renderPlot({
+        newdata <- loadDataMongo()
+        p <- ggplot(newdata, aes(x=newdata$Place, y=newdata$srp.pdprice.yui3)) + geom_point()
+        print(p)
 
-    }, height=700)
+      }, height=700)
 
-    output$markPlot <- renderPlotly({
-      p <- loadDataVisual()
-      print(p)
-    })
+      output$markPlot <- renderPlotly({
+        p <- loadDataVisual()
+        print(p)
+      })
 
 
-    keyToSearch <- reactive({
-      input$productKeyword
-    })
-    keyToRemove <- reactive({
-      input$removeKeyword
-    })
-    keyToInclude <- reactive({
-      input$includeKeyword
-    })
-  }
-)
-
-# runApp(appDir = paste0(path.package("YahooScrape"),'/R'))
+      keyToSearch <- reactive({
+        input$productKeyword
+      })
+      keyToRemove <- reactive({
+        input$removeKeyword
+      })
+      keyToInclude <- reactive({
+        input$includeKeyword
+      })
+    }
+  )
+  runApp(app)
+}
 
