@@ -9,19 +9,20 @@ ipak <- function(pkg){
 ipak(c("plyr","rvest","magrittr","plotly","jiebaR","wordcloud",
        "shiny","mongolite"))
 
-require(plyr)
-require(rvest)
-require(magrittr)
-require(plotly)
-require(jiebaR)
-require(wordcloud)
-require(shiny)
-require(mongolite)
+
 #### Search Function ####
 ybid.scrape <- function(main.keywords="iphone6",
                         filter.words.remove=c("6s|plus|32g|64g|128g"),
                         filter.words.keep="16g",
                         page.limit=NULL){
+
+  require(plyr)
+  require(rvest)
+  require(magrittr)
+  require(plotly)
+  require(jiebaR)
+  require(wordcloud)
+
   # filter.words.remove : 關鍵字以|間隔
   # main.keywords, filter.words.keep : 文字
   result <- list()
@@ -203,6 +204,8 @@ loadDataFromDB <- function(){
 }
 
 ybid.shiny <- function(){
+  require(shiny)
+  require(mongolite)
   app <- shinyApp(
     ui = navbarPage(
 
