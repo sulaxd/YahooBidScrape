@@ -5,6 +5,7 @@ require(plotly)
 require(jiebaR)
 require(wordcloud)
 require(shiny)
+require(mongolite)
 
 
 #### Search Function ####
