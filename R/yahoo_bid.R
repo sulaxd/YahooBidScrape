@@ -4,7 +4,7 @@ require(magrittr)
 require(plotly)
 require(jiebaR)
 require(wordcloud)
-
+require(shiny)
 scrape_yahoo <- function(main.keywords="iphone6",
                          filter.words.remove=c("6s","plus","32g","64g","128g"),
                          filter.words.keep="16g",
@@ -166,4 +166,151 @@ plot.ybid <- function(df, plot.type = 1, rm.outlier=T){
             wordcloud.bid(df)
     )
   }
+
+
+loadDataVisual <- function(){
+
+
+  m <- mongo(collection = "iphone6", url="mongodb://104.199.134.206")
+  m <- m$find()
+
+  price <- m$srp.pdprice.yui3.g
+  date <- as.Date(m$srp.pdtime)
+  t1 <- aggregate(price~date, m, mean)
+
+  fit <- lm(t1$price~t1$date)
+
+  plot_ly(t1, x = date, y = price) %>% add_trace(x = date, y= fitted(fit), mode="lines")
+  plot_ly(m, x = date, y = price, type = 'box')
+  price <- m$srp.pdprice.yui3.g
+  date <- as.Date(m$srp.pdtime)
+  t1 <- aggregate(price~date, m, mean)
+
+  fit <- lm(t1$price~t1$date)
+
+  p <- plot_ly(t1, x = date, y = price) %>% add_trace(x = date, y= fitted(fit), mode="lines")
+  return(p)
+}
+
+loadDataMongo <- function(){
+  m <- mongo(collection = "iphone6", url="mongodb://104.199.134.206")
+  rawdata<-m$find()
+  # 變數選擇＆型別轉換
+  rawdata$Date <- as.Date(rawdata$srp.pdtime)
+  rawdata$Rating <- strtoi(substr(rawdata$srp.rating, 4, nchar(rawdata$srp.rating)))
+  rawdata$Place <- substr(rawdata$srp.place, 3, nchar(rawdata$srp.place))
+  rawdata$Seller <- substr(rawdata$srp.seller.yui3.g, 5, nchar(rawdata$srp.seller.yui3.g))
+  iphone6s <- rawdata[c('Date', 'Place','Seller', 'Rating','srp.pdtitle', 'srp.pdprice.yui3.g')]
+  # 未去除離群值之前的統計圖
+  t1 <- aggregate(srp.pdprice.yui3.g~Date, iphone6s, mean)
+  plot_ly(t1, x = Date, y = srp.pdprice.yui3.g) # 依時間變化之價格趨勢(線圖)
+  plot_ly(iphone6s, x = Date, y = srp.pdprice.yui3.g, type = 'box') # 依時間變化之價格趨勢(盒型圖)
+
+  # 以 coef = 1.5去除離群值後之DF
+  boxplot.stats(iphone6s$srp.pdprice.yui3.g, coef = 1.5)
+  # 得出extreme of the lower whisker = 10500, extreme of the upper whisker = 15800
+  newdata = subset(iphone6s, srp.pdprice.yui3.g <= 15800 & srp.pdprice.yui3.g >=10500)
+  return(newdata)
+}
+
+app <- shinyApp(
+  ui = navbarPage(
+
+    title = '價格趨勢圖',
+    tabPanel('關鍵字設定',
+             h1('Search'),
+             fluidPage(
+               fluidRow(
+                 column(3,
+                        textInput("productKeyword",
+                                  label = h3("請輸入您要搜尋的商品關鍵字"),
+                                  value = "iPhone6")
+                 ),
+
+                 column(3,
+                        textInput("includeKeyword",
+                                  label = h3("請輸入一定要出現的關鍵字"),
+                                  value = "16g")
+                 ) ,
+                 column(3,
+                        textInput("removeKeyword",
+                                  label = h3("請輸入您要去除的的關鍵字"),
+                                  value = "通訊行|全新")
+                 )
+
+               ),
+               fluidRow(
+
+                 column(3,
+                        textInput("lowerPrice",
+                                  label = h3("價格區間"),
+                                  value = "10000"),
+                        textInput("upperPrice",
+                                  label = h3("價格區間"),
+                                  value = "30000")
+
+
+                 )
+               ),
+               fluidRow(
+                 column(3,
+                        # actionButton("action", label = "Action"),
+                        submitButton("搜尋"))
+               )
+             ), #fluidPage End
+             mainPanel(
+               dataTableOutput("mytable"),
+               textOutput("text1")  #顯示key的關鍵字
+
+             )
+    ),#Tab Panel End
+    navbarMenu("資料視覺化",
+               tabPanel("價格",
+                        mainPanel(
+                          plotlyOutput('markPlot')
+                        )
+               ),
+               tabPanel("地點",
+                        h1('地點'),
+                        mainPanel(
+                          plotOutput('locationPlot')
+                        ))
+    )
+  ),
+  server = function(input, output) {
+    output$mytable = renderDataTable({
+      newdata <- loadDataMongo()
+    })
+
+    output$text1 <- renderText({
+      paste("You have typed", input$productKeyword)
+    })
+
+
+    output$locationPlot <- renderPlot({
+      newdata <- loadDataMongo()
+      p <- ggplot(newdata, aes(x=newdata$Place, y=newdata$srp.pdprice.yui3)) + geom_point()
+      print(p)
+
+    }, height=700)
+
+    output$markPlot <- renderPlotly({
+      p <- loadDataVisual()
+      print(p)
+    })
+
+
+    keyToSearch <- reactive({
+      input$productKeyword
+    })
+    keyToRemove <- reactive({
+      input$removeKeyword
+    })
+    keyToInclude <- reactive({
+      input$includeKeyword
+    })
+  }
+)
+
+# runApp(appDir = paste0(path.package("YahooScrape"),'/R'))
 
