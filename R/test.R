@@ -37,7 +37,7 @@ s <- cc[newdata$srp.pdtitle]
 s <- gsub("[0-9]+?","",s)
 tableWord<-count(s)
 par(family=("Heiti TC Light"))
-wordcloud(tableWord[,1],tableWord[,2], scale=c(10,0.8))
+wordcloud(tableWord[,1],tableWord[,2], scale=c(10,0.8), colors = brewer.pal(name = "Paired", n=12))
 # 交叉表
 #View(table(newdata$Date))
 #View(table(newdata$Seller))
