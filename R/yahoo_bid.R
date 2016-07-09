@@ -5,58 +5,61 @@ require(plotly)
 require(jiebaR)
 require(wordcloud)
 require(shiny)
-ybid.scrape <- function(main.keywords="iphone6",
-                         filter.words.remove=c("6s","plus","32g","64g","128g"),
-                         filter.words.keep="16g",
-                         page.limit){
-  # filter.words.remove : 文字向量
-  # main.keywords, filter.words.keep : 文字
 
-  filter.words.remove <- paste(filter.words.remove, collapse="|")
+
+#### Search Function ####
+ybid.scrape <- function(main.keywords="iphone6",
+                        filter.words.remove=c("6s|plus|32g|64g|128g"),
+                        filter.words.keep="16g",
+                        page.limit=NULL){
+  # filter.words.remove : 關鍵字以|間隔
+  # main.keywords, filter.words.keep : 文字
   result <- list()
   page=999
   i=1
   options(stringsAsFactors = F)
 
-    url <- sprintf("https://tw.search.bid.yahoo.com/search/auction/product;_ylt=Ag3dtVJIWUOh2aOrJrw9RWFyFbN8;_ylv=3?kw=iphone6&p=iphone6&property=auction&sub_property=auction&srch=product&aoffset=0&poffset=0&pg=1&sort=-ptime&nst=1&act=srp&rescheck=1&pptf=3&cid=23960&clv=2",
-                   main.keywords, main.keywords, (i-1)*60, i)
-    dta <- read_html(url)
+  url <- sprintf("https://tw.search.bid.yahoo.com/search/auction/product;_ylt=Ag3dtVJIWUOh2aOrJrw9RWFyFbN8;_ylv=3?kw=iphone6&p=iphone6&property=auction&sub_property=auction&srch=product&aoffset=0&poffset=0&pg=1&sort=-ptime&nst=1&act=srp&rescheck=1&pptf=3&cid=23960&clv=2",
+                 main.keywords, main.keywords, (i-1)*60, i)
+  dta <- read_html(url)
 
-    if(page==999){
-      options(warn=-1)
-      pageUrls <- c()
+  if(page==999){
+    options(warn=-1)
+    pageUrls <- c()
+    tmp <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
+      html_children() %>% .[[1]] %>% html_children()
+    pageUrl <- html_children(tmp) %>% html_attr("href")
+    pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
+      html_children() %>% .[[1]] %>% html_children() %>% html_text()
+    page <- pages %>% as.integer() %>% .[!is.na(.)] %>% max()
+
+    while(any(grepl("下十頁",pages))){
+      tmp <- paste0("https://tw.search.bid.yahoo.com/search/auction/", pageUrl[which.max(as.integer(sapply(strsplit(pageUrl, "&|="), function(u){u[grep("pg",u)+1]})))])
+      dta <- read_html(tmp)
+      pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
+        html_children() %>% .[[1]] %>% html_children() %>% html_text()
+      page <- pages %>% as.integer() %>% .[!is.na(.)] %>% max()
+
+      # page url
       tmp <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
         html_children() %>% .[[1]] %>% html_children()
       pageUrl <- html_children(tmp) %>% html_attr("href")
       pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
         html_children() %>% .[[1]] %>% html_children() %>% html_text()
       page <- pages %>% as.integer() %>% .[!is.na(.)] %>% max()
-
-      while(any(grepl("下十頁",pages))){
-        tmp <- paste0("https://tw.search.bid.yahoo.com/search/auction/", pageUrl[which.max(as.integer(sapply(strsplit(pageUrl, "&|="), function(u){u[grep("pg",u)+1]})))])
-        dta <- read_html(tmp)
-        pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
-          html_children() %>% .[[1]] %>% html_children() %>% html_text()
-        page <- pages %>% as.integer() %>% .[!is.na(.)] %>% max()
-
-        # page url
-        tmp <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
-          html_children() %>% .[[1]] %>% html_children()
-        pageUrl <- html_children(tmp) %>% html_attr("href")
-        pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
-          html_children() %>% .[[1]] %>% html_children() %>% html_text()
-        page <- pages %>% as.integer() %>% .[!is.na(.)] %>% max()
-        pageUrls <- c(pageUrls, pageUrl)
-      }
-      pageUrls <- unique(pageUrls)
-      options(warn=0)
+      pageUrls <- c(pageUrls, pageUrl)
     }
+    pageUrls <- unique(pageUrls)
+    options(warn=0)
+  }
 
-    for(i in 1:length(pageUrls)){
+  for(i in 1:length(pageUrls)){
     if(!is.null(page.limit)){ if(i>page.limit){break}}
     url <- sprintf("https://tw.search.bid.yahoo.com/search/auction/%s",pageUrls[i])
     dta <- read_html(url)
+    # paste0("正在擷取第",i,"頁，共",length(pageUrls),"頁 \n")
     cat("正在擷取第",i,"頁，共",length(pageUrls),"頁 \n")
+
     item_list <- (dta %>% html_nodes(xpath = "//div[@class='list-type yui3-g']"))[[1]] %>% html_children()
 
     dta_collection <- lapply(item_list, function(u){
@@ -79,7 +82,7 @@ ybid.scrape <- function(main.keywords="iphone6",
       unlist(result_tmp)
     })
     dta_collection <- lapply(dta_collection,function(u){
-       gsub("\\n | $","",u) %>% gsub(" {2,}"," ",.) %>% as.list() %>% as.data.frame()
+      gsub("\\n | $","",u) %>% gsub(" {2,}"," ",.) %>% as.list() %>% as.data.frame()
     })
 
     result[[i]] <- do.call("rbind.fill", dta_collection)
@@ -135,15 +138,14 @@ wordcloud.bid <- function(df){
   s <- cc[df$srp.pdtitle]
   s <- gsub("[0-9]+?","",s)
   tableWord<-count(s)
-  Sys.info()
   if(get_os()=="osx"){
     par(family=("Heiti TC Light"))
   }
-  wordcloud(tableWord[,1],tableWord[,2], scale=c(8,0.8),
-            random.order=F)
+  wordcloud(tableWord[,1],tableWord[,2], scale=c(12,0.8),
+            random.order=F,colors=brewer.pal(8, "Dark2"))
 }
 
-
+#### Plot Function ####
 plot.ybid <- function(df, plot.type = 1, rm.outlier=T){
   # rm.outlier=T:以 coef = 1.5去除離群值
   # plot.type=1:依時間變化之平均價格趨勢(box chart)
@@ -155,62 +157,39 @@ plot.ybid <- function(df, plot.type = 1, rm.outlier=T){
     df <- subset(df, df$srp.pdprice.yui3.g <= 15800 & df$srp.pdprice.yui3.g >=10500)
   }
 
-    switch (plot.type,
-            plot_ly(df, x = df$Date, y = srp.pdprice.yui3.g, type = 'box')%>% layout(yaxis = list(title='價格'), xaxis = list(title='時間')) # 依時間變化之價格趨勢(盒型圖)
-            ,
-            {fit <- lm(df$srp.pdprice.yui3.g~df$Date)
-            aggregate(srp.pdprice.yui3.g~Date, df, median) %>% plot_ly(x = Date, y = srp.pdprice.yui3.g) %>% add_trace(x = Date, y= fitted(fit), mode="lines") %>% layout(yaxis = list(title='價格'), xaxis = list(title='時間'))} # 依時間變化之價格趨勢(線圖)
-            ,
-            aggregate(srp.pdprice.yui3.g~Place, df, mean) %>% plot_ly(x = Place, y = srp.pdprice.yui3.g, type='bar') %>% layout(yaxis = list(title='價格'), xaxis = list(title='地點')) # 不同縣市之平均價格
-            ,
-            wordcloud.bid(df)
-    )
-  }
+  median.value <- aggregate(srp.pdprice.yui3.g~Date, df, median)
+  mean.value <- aggregate(srp.pdprice.yui3.g~Date, df, mean)
+  min.value <- aggregate(srp.pdprice.yui3.g~Date, df, min)
+  max.value <- aggregate(srp.pdprice.yui3.g~Date, df, max)
 
 
-loadDataVisual <- function(){
 
-
-  m <- mongo(collection = "iphone6", url="mongodb://104.199.134.206")
-  m <- m$find()
-
-  price <- m$srp.pdprice.yui3.g
-  date <- as.Date(m$srp.pdtime)
-  t1 <- aggregate(price~date, m, mean)
-
-  fit <- lm(t1$price~t1$date)
-
-  plot_ly(t1, x = date, y = price) %>% add_trace(x = date, y= fitted(fit), mode="lines")
-  plot_ly(m, x = date, y = price, type = 'box')
-  price <- m$srp.pdprice.yui3.g
-  date <- as.Date(m$srp.pdtime)
-  t1 <- aggregate(price~date, m, mean)
-
-  fit <- lm(t1$price~t1$date)
-
-  p <- plot_ly(t1, x = date, y = price) %>% add_trace(x = date, y= fitted(fit), mode="lines")
-  return(p)
+  switch (plot.type,
+          plot_ly(df, x = df$Date, y = srp.pdprice.yui3.g, type = 'box')%>% layout(yaxis = list(title='價格'), xaxis = list(title='時間')) # 依時間變化之價格趨勢(盒型圖)
+          ,
+          {fit <- lm(df$srp.pdprice.yui3.g~df$Date)
+          plot_ly(mean.value, x = Date, y = srp.pdprice.yui3.g, mode="lines",symbol = "平均值") %>%
+            add_trace(x = Date, y= fitted(fit), mode="lines",symbol = "迴歸線") %>%
+            add_trace(x = Date, y= median.value$srp.pdprice.yui3.g, mode="lines", symbol = "中位數") %>%
+            add_trace(x = Date, y= min.value$srp.pdprice.yui3.g, mode="lines", symbol = "最小值", size=0.05) %>%
+            add_trace(x = Date, y= max.value$srp.pdprice.yui3.g, mode="lines", symbol = "最大值", size=0.05) %>%
+            layout(yaxis = list(title='價格'), xaxis = list(title='時間'))} # 依時間變化之價格趨勢(線圖)
+          ,
+          # aggregate(srp.pdprice.yui3.g~Place, df, mean) %>% plot_ly(x = Place, y = srp.pdprice.yui3.g, type='bar') %>% layout(yaxis = list(title='價格'), xaxis = list(title='地點')) # 不同縣市之平均價格
+          {mean.byLocation <- aggregate(srp.pdprice.yui3.g~Place, df, mean)
+          df.location <- cbind(mean.byLocation,table(df$Place))
+            plot_ly(df.location, x = Place, y = srp.pdprice.yui3.g, size = Freq, mode = "markers") %>% layout(yaxis = list(title='價格'), xaxis = list(title='地點')) # 不同縣市之平均價格
+            }
+          ,
+          wordcloud.bid(df)
+  )
 }
 
-loadDataMongo <- function(){
-  m <- mongo(collection = "iphone6", url="mongodb://104.199.134.206")
-  rawdata<-m$find()
-  # 變數選擇＆型別轉換
-  rawdata$Date <- as.Date(rawdata$srp.pdtime)
-  rawdata$Rating <- strtoi(substr(rawdata$srp.rating, 4, nchar(rawdata$srp.rating)))
-  rawdata$Place <- substr(rawdata$srp.place, 3, nchar(rawdata$srp.place))
-  rawdata$Seller <- substr(rawdata$srp.seller.yui3.g, 5, nchar(rawdata$srp.seller.yui3.g))
-  iphone6s <- rawdata[c('Date', 'Place','Seller', 'Rating','srp.pdtitle', 'srp.pdprice.yui3.g')]
-  # 未去除離群值之前的統計圖
-  t1 <- aggregate(srp.pdprice.yui3.g~Date, iphone6s, mean)
-  plot_ly(t1, x = Date, y = srp.pdprice.yui3.g) # 依時間變化之價格趨勢(線圖)
-  plot_ly(iphone6s, x = Date, y = srp.pdprice.yui3.g, type = 'box') # 依時間變化之價格趨勢(盒型圖)
 
-  # 以 coef = 1.5去除離群值後之DF
-  boxplot.stats(iphone6s$srp.pdprice.yui3.g, coef = 1.5)
-  # 得出extreme of the lower whisker = 10500, extreme of the upper whisker = 15800
-  newdata = subset(iphone6s, srp.pdprice.yui3.g <= 15800 & srp.pdprice.yui3.g >=10500)
-  return(newdata)
+loadDataFromDB <- function(){
+  m <- mongo(collection = "iphone6", url="mongodb://104.199.134.206")
+  df <- m$find()
+  return(df)
 }
 
 ybid.shiny <- function(){
@@ -218,86 +197,91 @@ ybid.shiny <- function(){
     ui = navbarPage(
 
       title = '價格趨勢圖',
-      tabPanel('關鍵字設定',
-               h1('Search'),
-               fluidPage(
-                 fluidRow(
-                   column(3,
-                          textInput("productKeyword",
-                                    label = h3("請輸入您要搜尋的商品關鍵字"),
-                                    value = "iPhone6")
-                   ),
+      # tabPanel('關鍵字設定',
+      #          h1('Search'),
+      #          fluidPage(
+      #            fluidRow(
+                   # column(3,
+                   #        textInput("productKeyword",
+                   #                  label = "商品關鍵字",
+                   #                  value = "iPhone6"),
+                   #        textInput("includeKeyword",
+                   #                  label = "必要關鍵字",
+                   #                  value = "16g"),
+                   #        textInput("removeKeyword",
+                   #                  label = "篩除關鍵字",
+                   #                  value = "通訊行|全新"),
+                   #        # textInput("lowerPrice",
+                   #        #           label = h3("價格區間"),
+                   #        #           value = "10000"),
+                   #        # textInput("upperPrice",
+                   #        #           label = h3("價格區間"),
+                   #        #           value = "30000"),
+                   #        verbatimTextOutput("urlText"),
+                   #        actionButton("search", "搜尋")
+                   # ),
+                   # column(10,
+                   #        dataTableOutput("mytable"),
+                   #        textOutput("text1")  #顯示key的關鍵字
+                   # ))
+               # ) #fluidPage End
 
-                   column(3,
-                          textInput("includeKeyword",
-                                    label = h3("請輸入一定要出現的關鍵字"),
-                                    value = "16g")
-                   ) ,
-                   column(3,
-                          textInput("removeKeyword",
-                                    label = h3("請輸入您要去除的的關鍵字"),
-                                    value = "通訊行|全新")
-                   )
-
-                 ),
-                 fluidRow(
-
-                   column(3,
-                          textInput("lowerPrice",
-                                    label = h3("價格區間"),
-                                    value = "10000"),
-                          textInput("upperPrice",
-                                    label = h3("價格區間"),
-                                    value = "30000")
-
-
-                   )
-                 ),
-                 fluidRow(
-                   column(3,
-                          # actionButton("action", label = "Action"),
-                          submitButton("搜尋"))
-                 )
-               ), #fluidPage End
+      # ),#Tab Panel End
+      # navbarMenu("資料視覺化",
+      tabPanel("價格趨勢",
+               h1('價格'),
                mainPanel(
-                 dataTableOutput("mytable"),
-                 textOutput("text1")  #顯示key的關鍵字
-
+                 plotlyOutput('linePlot')
                )
-      ),#Tab Panel End
-      navbarMenu("資料視覺化",
-                 tabPanel("價格",
-                          mainPanel(
-                            plotlyOutput('markPlot')
-                          )
-                 ),
-                 tabPanel("地點",
-                          h1('地點'),
-                          mainPanel(
-                            plotOutput('locationPlot')
-                          ))
-      )
+      ),
+      tabPanel("價格變異",
+               h1('價格盒鬚圖'),
+               mainPanel(
+                 plotlyOutput('boxPlot')
+               )),
+      tabPanel("標題探勘",
+               h1('標題文字雲'),
+               mainPanel(
+                 plotOutput('wordPlot')
+               )),
+      tabPanel("地點散佈",
+               h1('地點氣泡圖'),
+               mainPanel(
+                 plotlyOutput('locationPlot',width = "800px")
+               ))
+      # )
     ),
     server = function(input, output) {
-      output$mytable = renderDataTable({
-        newdata <- loadDataMongo()
-      })
+
+      df <- loadDataFromDB()
 
       output$text1 <- renderText({
         paste("You have typed", input$productKeyword)
       })
 
+      #### Search 暫不開放####
+      observeEvent(input$search, {
+        ybid.scrape()
+      })
 
-      output$locationPlot <- renderPlot({
-        newdata <- loadDataMongo()
-        p <- ggplot(newdata, aes(x=newdata$Place, y=newdata$srp.pdprice.yui3)) + geom_point()
-        print(p)
 
-      }, height=700)
+      output$locationPlot <- renderPlotly({
+        print(plot.ybid(df,3))
+      })
 
-      output$markPlot <- renderPlotly({
-        p <- loadDataVisual()
-        print(p)
+      output$boxPlot <- renderPlotly({
+        print(plot.ybid(df,1))
+      })
+
+      output$wordPlot <- renderPlot({
+        withProgress({
+          setProgress(message = "Processing corpus...")
+          print(plot.ybid(df,4))
+        })
+      })
+
+      output$linePlot <- renderPlotly({
+        print(plot.ybid(df,2))
       })
 
 
@@ -314,4 +298,3 @@ ybid.shiny <- function(){
   )
   runApp(app)
 }
-
