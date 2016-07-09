@@ -1,16 +1,18 @@
-# main.keywords <- "iphone6"
-# filter.words.remove <- c("6s","plus","32g","64g","128g")
-# filter.words.keep <- "16g"
+require(plyr)
+require(rvest)
+require(magrittr)
+require(plotly)
+require(jiebaR)
+require(wordcloud)
 
-scrape_yahoo <- function(main.keywords, filter.words.remove, filter.words.keep){
+scrape_yahoo <- function(main.keywords="iphone6",
+                         filter.words.remove=c("6s","plus","32g","64g","128g"),
+                         filter.words.keep="16g",
+                         page.limit){
   # filter.words.remove : 文字向量
   # main.keywords, filter.words.keep : 文字
 
   filter.words.remove <- paste(filter.words.remove, collapse="|")
-  require(plyr)
-  require(rvest)
-  require(magrittr)
-
   result <- list()
   page=999
   i=1
@@ -32,7 +34,6 @@ scrape_yahoo <- function(main.keywords, filter.words.remove, filter.words.keep){
 
       while(any(grepl("下十頁",pages))){
         tmp <- paste0("https://tw.search.bid.yahoo.com/search/auction/", pageUrl[which.max(as.integer(sapply(strsplit(pageUrl, "&|="), function(u){u[grep("pg",u)+1]})))])
-        print(tmp)
         dta <- read_html(tmp)
         pages <- dta %>% html_nodes(xpath = "//div[@class='srp_pagination srp_pjax ']") %>% .[[1]] %>%
           html_children() %>% .[[1]] %>% html_children() %>% html_text()
@@ -52,6 +53,7 @@ scrape_yahoo <- function(main.keywords, filter.words.remove, filter.words.keep){
     }
 
     for(i in 1:length(pageUrls)){
+    if(!is.null(page.limit)){ if(i>page.limit){break}}
     url <- sprintf("https://tw.search.bid.yahoo.com/search/auction/%s",pageUrls[i])
     dta <- read_html(url)
     cat("正在擷取第",i,"頁，共",length(pageUrls),"頁 \n")
@@ -76,7 +78,6 @@ scrape_yahoo <- function(main.keywords, filter.words.remove, filter.words.keep){
       }
       unlist(result_tmp)
     })
-
     dta_collection <- lapply(dta_collection,function(u){
        gsub("\\n | $","",u) %>% gsub(" {2,}"," ",.) %>% as.list() %>% as.data.frame()
     })
@@ -99,15 +100,70 @@ scrape_yahoo <- function(main.keywords, filter.words.remove, filter.words.keep){
     return(result_bind)
   }
   result_bind.filterRemove <- result_bind[-grep(tolower(filter.words.remove),result_bind$srp.pdtitle),]
-  result_bind.filterKeep <- result_bind.filterRemove[grep(filter.words.keep,result_bind.filterRemove$srp.pdtitle),]
-  result_bind.filterKeep
+  rawdata <- result_bind.filterRemove[grep(filter.words.keep,result_bind.filterRemove$srp.pdtitle),]
+
+  # 變數選擇＆型別轉換
+  rawdata$Date <- as.Date(rawdata$srp.pdtime)
+  rawdata$Rating <- strtoi(substr(rawdata$srp.rating, 4, nchar(rawdata$srp.rating)))
+  rawdata$Place <- substr(rawdata$srp.place, 3, nchar(rawdata$srp.place))
+  rawdata$Seller <- substr(rawdata$srp.seller.yui3.g, 5, nchar(rawdata$srp.seller.yui3.g))
+  rawdata <- rawdata[c('Date', 'Place','Seller', 'Rating','srp.pdtitle', 'srp.pdprice.yui3.g')]
+  class(rawdata) <- c("ybid", "data.frame")
+  rawdata
 }
 
-remove_outliers <- function(x, na.rm = TRUE, ...) {
-  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
-  H <- 1.5 * IQR(x, na.rm = na.rm)
-  y <- x
-  y <- y[x >= (qnt[1] - H)]
-  y <- y[y <= (qnt[2] + H)]
-  y
+
+get_os <- function(){
+  sysinf <- Sys.info()
+  if (!is.null(sysinf)){
+    os <- sysinf['sysname']
+    if (os == 'Darwin')
+      os <- "osx"
+  } else { ## mystery machine
+    os <- .Platform$OS.type
+    if (grepl("^darwin", R.version$os))
+      os <- "osx"
+    if (grepl("linux-gnu", R.version$os))
+      os <- "linux"
+  }
+  tolower(os)
 }
+
+#文字雲
+wordcloud.bid <- function(df){
+  cc <- worker()
+  s <- cc[df$srp.pdtitle]
+  s <- gsub("[0-9]+?","",s)
+  tableWord<-count(s)
+  Sys.info()
+  if(get_os()!="windows"){
+    par(family=("Heiti TC Light"))
+  }
+  wordcloud(tableWord[,1],tableWord[,2], scale=c(8,0.8),
+            random.order=F)
+}
+
+
+plot.ybid <- function(df, plot.type = 1, rm.outlier=T){
+  # rm.outlier=T:以 coef = 1.5去除離群值
+  # plot.type=1:依時間變化之平均價格趨勢(box chart)
+  # plot.type=2:依時間變化之平均價格趨勢(line chart)
+  # plot.type=3:不同縣市之平均價格(bar chart)
+  # plot.type=4:標題斷詞後之文字雲
+  if(rm.outlier){
+    boxplot.stats(df$srp.pdprice.yui3.g, coef = 1.5)
+    df <- subset(df, df$srp.pdprice.yui3.g <= 15800 & df$srp.pdprice.yui3.g >=10500)
+  }
+
+    switch (plot.type,
+            plot_ly(df, x = df$Date, y = srp.pdprice.yui3.g, type = 'box')%>% layout(yaxis = list(title='價格'), xaxis = list(title='時間')) # 依時間變化之價格趨勢(盒型圖)
+            ,
+            {fit <- lm(df$srp.pdprice.yui3.g~df$Date)
+            aggregate(srp.pdprice.yui3.g~Date, df, median) %>% plot_ly(x = Date, y = srp.pdprice.yui3.g) %>% add_trace(x = Date, y= fitted(fit), mode="lines") %>% layout(yaxis = list(title='價格'), xaxis = list(title='時間'))} # 依時間變化之價格趨勢(線圖)
+            ,
+            aggregate(srp.pdprice.yui3.g~Place, df, mean) %>% plot_ly(x = Place, y = srp.pdprice.yui3.g, type='bar') %>% layout(yaxis = list(title='價格'), xaxis = list(title='地點')) # 不同縣市之平均價格
+            ,
+            wordcloud.bid(df)
+    )
+  }
+
