@@ -310,5 +310,5 @@ ybid.shiny <- function(){
       })
     }
   )
-  runApp(app)
+  runApp(app,launch.browser = T)
 }
