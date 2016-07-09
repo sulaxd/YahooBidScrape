@@ -206,6 +206,7 @@ loadDataFromDB <- function(){
 ybid.shiny <- function(){
   require(shiny)
   require(mongolite)
+  require(plotly)
   app <- shinyApp(
     ui = navbarPage(
 
