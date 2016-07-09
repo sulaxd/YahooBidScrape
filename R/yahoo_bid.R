@@ -19,9 +19,7 @@ ybid.scrape <- function(main.keywords="iphone6",
   require(plyr)
   require(rvest)
   require(magrittr)
-  require(plotly)
-  require(jiebaR)
-  require(wordcloud)
+
 
   # filter.words.remove : 關鍵字以|間隔
   # main.keywords, filter.words.keep : 文字
@@ -158,6 +156,11 @@ wordcloud.bid <- function(df){
 
 #### Plot Function ####
 plot.ybid <- function(df, plot.type = 1, rm.outlier=T){
+  require(jiebaR)
+  require(plotly)
+  require(wordcloud)
+  require(plyr)
+  require(magrittr)
   # rm.outlier=T:以 coef = 1.5去除離群值
   # plot.type=1:依時間變化之平均價格趨勢(box chart)
   # plot.type=2:依時間變化之平均價格趨勢(line chart)
